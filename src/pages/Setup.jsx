@@ -8,8 +8,10 @@ export default function Setup() {
   const { user, setOwnerProfile } = useAuth()
   const navigate = useNavigate()
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
   const [form, setForm] = useState({
     name: '',
+    phone: '',
     reading_area_name: '',
     address: '',
     monthly_fee: '',
@@ -22,12 +24,13 @@ export default function Setup() {
   async function handleSubmit(e) {
     e.preventDefault()
     setLoading(true)
+    setError('')
 
     if (DEMO_MODE) {
       setOwnerProfile({
-        id: user.id,
+        id: user?.id || 'demo-owner',
         name: form.name,
-        phone: user.phone,
+        phone: form.phone,
         reading_area_name: form.reading_area_name,
         address: form.address,
         monthly_fee: parseFloat(form.monthly_fee) || 0,
@@ -37,12 +40,12 @@ export default function Setup() {
       return
     }
 
-    const { data, error } = await supabase
+    const { data, error: insertError } = await supabase
       .from('owners')
       .insert({
         id: user.id,
         name: form.name,
-        phone: user.phone,
+        phone: form.phone,
         reading_area_name: form.reading_area_name,
         address: form.address,
         monthly_fee: parseFloat(form.monthly_fee) || 0,
@@ -51,7 +54,13 @@ export default function Setup() {
       .select()
       .single()
 
-    if (!error && data) {
+    if (insertError) {
+      setError(insertError.message || 'Failed to create profile')
+      setLoading(false)
+      return
+    }
+
+    if (data) {
       setOwnerProfile(data)
       navigate('/')
     }
@@ -80,6 +89,14 @@ export default function Setup() {
               />
             </div>
             <div>
+              <label htmlFor="phone" className="block text-xs font-medium text-body mb-1.5">Phone Number</label>
+              <input
+                id="phone" name="phone" type="tel" value={form.phone} onChange={handleChange} required
+                className="w-full h-11 px-3.5 border border-hairline rounded-xl text-sm bg-canvas text-ink placeholder:text-mute/60 focus:outline-none focus:ring-2 focus:ring-link/20 focus:border-link transition-all"
+                placeholder="9876543210" inputMode="numeric"
+              />
+            </div>
+            <div>
               <label htmlFor="reading_area_name" className="block text-xs font-medium text-body mb-1.5">Reading Area Name</label>
               <input
                 id="reading_area_name" name="reading_area_name" value={form.reading_area_name} onChange={handleChange} required
@@ -103,9 +120,17 @@ export default function Setup() {
                 placeholder="500" inputMode="numeric"
               />
             </div>
+
+            {error && (
+              <p className="text-error text-xs flex items-center gap-1">
+                <span className="w-1 h-1 rounded-full bg-error" />
+                {error}
+              </p>
+            )}
+
             <button
               type="submit"
-              disabled={loading || !form.name || !form.reading_area_name}
+              disabled={loading || !form.name || !form.reading_area_name || !form.phone}
               className="w-full h-11 mt-2 bg-primary text-on-primary text-sm font-medium rounded-xl hover:bg-ink/90 transition-all disabled:opacity-40 disabled:cursor-not-allowed active:scale-[0.98]"
             >
               {loading ? (

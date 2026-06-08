@@ -49,7 +49,16 @@ export default function AddStudent() {
     setLoading(true)
 
     if (DEMO_MODE) {
-      setTimeout(() => navigate('/students'), 800)
+      setTimeout(() => {
+        setLoading(false)
+        navigate('/students')
+      }, 800)
+      return
+    }
+
+    if (!ownerProfile?.id) {
+      setError('Owner profile not loaded. Please try again.')
+      setLoading(false)
       return
     }
 
