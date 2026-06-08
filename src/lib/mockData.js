@@ -1,6 +1,6 @@
 // Mock data for demo mode — lets you preview all pages without Supabase
 
-export const DEMO_MODE = true
+export const DEMO_MODE = false
 
 export const mockStudents = [
   {

@@ -40,7 +40,10 @@ export function AuthProvider({ children }) {
       .eq('id', userId)
       .single()
 
-    if (!error && data) {
+    if (error) {
+      console.warn('Could not fetch owner profile:', error.message)
+    }
+    if (data) {
       setOwnerProfile(data)
     }
     setLoading(false)
