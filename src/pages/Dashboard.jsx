@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
+import { autoCloseOpenSessions } from '../lib/autoCloseSessions'
 import { DEMO_MODE, mockAttendanceLogs, mockStudents, mockFeePayments } from '../lib/mockData'
 import { Users, UserPlus, LogIn, CreditCard, Clock, AlertTriangle, ArrowRight, Zap } from 'lucide-react'
 
@@ -17,7 +18,15 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    if (ownerProfile) fetchDashboardData()
+    if (ownerProfile) {
+      // Auto-close any stale sessions from previous days
+      if (!DEMO_MODE) {
+        autoCloseOpenSessions(ownerProfile.id).then((count) => {
+          if (count > 0) console.log(`Auto-closed ${count} stale session(s)`)
+        })
+      }
+      fetchDashboardData()
+    }
   }, [ownerProfile])
 
   async function fetchDashboardData() {

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
 import { DEMO_MODE, mockAttendanceLogs, mockStudents } from '../lib/mockData'
-import { LogIn, LogOut, QrCode, Clock, Search, X } from 'lucide-react'
+import { LogIn, LogOut, QrCode, Clock, Search, X, Pencil } from 'lucide-react'
 import { QRCodeSVG } from 'qrcode.react'
 
 export default function Attendance() {
@@ -13,8 +13,52 @@ export default function Attendance() {
   const [loading, setLoading] = useState(true)
   const [showDoorQR, setShowDoorQR] = useState(false)
   const [marking, setMarking] = useState(null)
+  const [editLog, setEditLog] = useState(null)
+  const [editExitTime, setEditExitTime] = useState('')
+  const [editSaving, setEditSaving] = useState(false)
 
   const today = new Date().toISOString().split('T')[0]
+
+  async function handleEditSave(e) {
+    e.preventDefault()
+    if (!editLog || !editExitTime) return
+    setEditSaving(true)
+
+    const [hours, minutes] = editExitTime.split(':').map(Number)
+    const entryDate = new Date(editLog.entry_time)
+    const exitTime = new Date(entryDate)
+    exitTime.setHours(hours, minutes, 0, 0)
+
+    // If exit time is before entry, something is wrong — clamp to entry
+    if (exitTime <= entryDate) {
+      exitTime.setTime(entryDate.getTime() + 60000) // at least 1 min
+    }
+
+    const durationMinutes = Math.round((exitTime.getTime() - entryDate.getTime()) / (1000 * 60))
+
+    if (DEMO_MODE) {
+      setTodayLogs(prev => prev.map(l =>
+        l.id === editLog.id
+          ? { ...l, exit_time: exitTime.toISOString(), duration_minutes: durationMinutes, method: 'manual' }
+          : l
+      ))
+    } else {
+      await supabase
+        .from('attendance_logs')
+        .update({
+          exit_time: exitTime.toISOString(),
+          duration_minutes: durationMinutes,
+          method: 'manual', // Mark as manually corrected
+        })
+        .eq('id', editLog.id)
+
+      await fetchTodayLogs()
+    }
+
+    setEditLog(null)
+    setEditExitTime('')
+    setEditSaving(false)
+  }
 
   useEffect(() => {
     if (ownerProfile) {
@@ -288,22 +332,91 @@ export default function Attendance() {
                     </span>
                   </div>
                   <div>
-                    <p className="text-sm text-ink">{log.students?.name}</p>
+                    <div className="flex items-center gap-1.5">
+                      <p className="text-sm text-ink">{log.students?.name}</p>
+                      {log.method === 'auto_closed' && (
+                        <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-warning-soft text-warning border border-warning/20">
+                          Auto-closed
+                        </span>
+                      )}
+                    </div>
                     <p className="text-[11px] text-mute font-mono">{log.students?.student_id}</p>
                   </div>
                 </div>
-                <div className="text-right">
-                  <p className="text-xs text-body">
-                    {new Date(log.entry_time).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
-                    {' → '}
-                    {new Date(log.exit_time).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
-                  </p>
-                  <p className="text-[11px] text-mute font-medium">
-                    {Math.floor(log.duration_minutes / 60)}h {log.duration_minutes % 60}m
-                  </p>
+                <div className="text-right flex items-center gap-2">
+                  <div>
+                    <p className="text-xs text-body">
+                      {new Date(log.entry_time).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+                      {' → '}
+                      {new Date(log.exit_time).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+                    </p>
+                    <p className="text-[11px] text-mute font-medium">
+                      {Math.floor(log.duration_minutes / 60)}h {log.duration_minutes % 60}m
+                    </p>
+                  </div>
+                  {log.method === 'auto_closed' && (
+                    <button
+                      onClick={() => setEditLog(log)}
+                      className="p-1.5 text-mute hover:text-body hover:bg-canvas-soft-2 rounded-md transition-colors"
+                      aria-label="Edit session"
+                    >
+                      <Pencil size={12} />
+                    </button>
+                  )}
                 </div>
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* Edit Auto-Closed Session Modal */}
+      {editLog && (
+        <div className="fixed inset-0 bg-ink/60 backdrop-blur-sm flex items-end sm:items-center justify-center z-50 p-4 animate-fade-in">
+          <div className="bg-canvas rounded-2xl w-full max-w-sm p-6 shadow-modal animate-slide-up">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h3 className="text-base font-semibold text-ink">Edit Session</h3>
+                <p className="text-xs text-mute mt-0.5">
+                  {editLog.students?.name} · {new Date(editLog.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
+                </p>
+              </div>
+              <button onClick={() => setEditLog(null)} className="p-1.5 hover:bg-canvas-soft-2 rounded-lg">
+                <X size={18} className="text-mute" />
+              </button>
+            </div>
+
+            <p className="text-xs text-warning bg-warning-soft/50 p-2 rounded-lg mb-4">
+              This session was auto-closed because the student forgot to scan exit.
+            </p>
+
+            <form onSubmit={handleEditSave} className="space-y-3">
+              <div>
+                <label className="block text-xs font-medium text-body mb-1.5">Actual Exit Time</label>
+                <input
+                  type="time"
+                  value={editExitTime}
+                  onChange={(e) => setEditExitTime(e.target.value)}
+                  className="w-full h-11 px-3.5 border border-hairline rounded-xl text-sm bg-canvas text-ink focus:outline-none focus:ring-2 focus:ring-link/20 focus:border-link transition-all"
+                />
+              </div>
+              <div className="flex gap-2.5 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setEditLog(null)}
+                  className="flex-1 h-10 text-sm font-medium border border-hairline rounded-xl hover:bg-canvas-soft-2 transition-all"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={editSaving}
+                  className="flex-1 h-10 text-sm font-medium bg-primary text-on-primary rounded-xl hover:bg-ink/90 transition-all disabled:opacity-50"
+                >
+                  {editSaving ? 'Saving...' : 'Save'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
