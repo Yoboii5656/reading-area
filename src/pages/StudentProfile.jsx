@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
 import { DEMO_MODE, mockStudents, getMockStudentAttendance, getMockStudentPayments } from '../lib/mockData'
-import { ArrowLeft, Phone, MapPin, CreditCard, Calendar, QrCode, User, Clock } from 'lucide-react'
+import { svgToDataUrl } from '../lib/qrUtils'
+import { ArrowLeft, Phone, MapPin, CreditCard, Calendar, QrCode, User, Clock, Download, Share2 } from 'lucide-react'
 import { QRCodeSVG } from 'qrcode.react'
 
 export default function StudentProfile() {
@@ -14,6 +15,8 @@ export default function StudentProfile() {
   const [payments, setPayments] = useState([])
   const [loading, setLoading] = useState(true)
   const [showQR, setShowQR] = useState(false)
+  const [generatingPDF, setGeneratingPDF] = useState(false)
+  const qrRef = useRef(null)
 
   useEffect(() => {
     if (ownerProfile) fetchStudent()
@@ -73,6 +76,77 @@ export default function StudentProfile() {
     return 'active'
   }
 
+  async function handleDownloadCard() {
+    if (!student || !qrRef.current) return
+    setGeneratingPDF(true)
+
+    try {
+      // Dynamically import PDF generation to keep initial bundle small
+      const { generateStudentCardPDF, downloadPDF } = await import('../lib/generateStudentCard')
+
+      // Capture QR as PNG data URL
+      const svgEl = qrRef.current.querySelector('svg')
+      let qrDataUrl = null
+      if (svgEl) {
+        qrDataUrl = await svgToDataUrl(svgEl, 200)
+      }
+
+      const validity = getLastPaymentValidity()
+      const validUntilStr = validity
+        ? new Date(validity).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
+        : null
+
+      const blob = await generateStudentCardPDF({
+        student,
+        ownerProfile,
+        qrDataUrl,
+        validUntil: validUntilStr,
+      })
+
+      downloadPDF(blob, `${student.student_id}-card.pdf`)
+    } catch (err) {
+      console.error('PDF generation failed:', err)
+    }
+    setGeneratingPDF(false)
+  }
+
+  async function handleShareCard() {
+    if (!student) return
+    if (navigator.share) {
+      try {
+        const { generateStudentCardPDF } = await import('../lib/generateStudentCard')
+        const svgEl = qrRef.current?.querySelector('svg')
+        let qrDataUrl = null
+        if (svgEl) {
+          qrDataUrl = await svgToDataUrl(svgEl, 200)
+        }
+
+        const validity = getLastPaymentValidity()
+        const validUntilStr = validity
+          ? new Date(validity).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
+          : null
+
+        const blob = await generateStudentCardPDF({
+          student,
+          ownerProfile,
+          qrDataUrl,
+          validUntil: validUntilStr,
+        })
+
+        const file = new File([blob], `${student.student_id}-card.pdf`, { type: 'application/pdf' })
+        await navigator.share({
+          title: `Student Card - ${student.name}`,
+          files: [file],
+        })
+      } catch (err) {
+        // Fallback to download
+        handleDownloadCard()
+      }
+    } else {
+      handleDownloadCard()
+    }
+  }
+
   if (loading) {
     return (
       <div className="space-y-4">
@@ -105,7 +179,7 @@ export default function StudentProfile() {
     'no-payment': { label: 'No Payment', class: 'bg-canvas-soft-2 text-mute border-hairline' },
   }
 
-  const qrData = JSON.stringify({
+  const qrValue = JSON.stringify({
     type: 'student',
     id: student.student_id,
     ownerId: ownerProfile.id,
@@ -154,14 +228,31 @@ export default function StudentProfile() {
             </span>
           </div>
 
-          {/* QR Code */}
-          {showQR && (
-            <div className="mt-4 pt-4 border-t border-hairline/60 flex justify-center animate-scale-in">
-              <div className="p-4 bg-canvas-soft rounded-xl border border-hairline">
-                <QRCodeSVG value={qrData} size={140} level="M" />
-              </div>
+          {/* QR Code (hidden ref for PDF generation, visible when toggled) */}
+          <div ref={qrRef} className={showQR ? 'mt-4 pt-4 border-t border-hairline/60 flex justify-center animate-scale-in' : 'absolute -left-[9999px]'}>
+            <div className="p-4 bg-canvas-soft rounded-xl border border-hairline">
+              <QRCodeSVG value={qrValue} size={140} level="M" />
             </div>
-          )}
+          </div>
+
+          {/* Card actions */}
+          <div className="flex gap-2 mt-4 pt-4 border-t border-hairline/60">
+            <button
+              onClick={handleDownloadCard}
+              disabled={generatingPDF}
+              className="flex-1 flex items-center justify-center gap-1.5 h-9 text-xs font-medium bg-primary text-on-primary rounded-lg hover:bg-ink/90 transition-all active:scale-[0.97] disabled:opacity-50"
+            >
+              <Download size={13} />
+              {generatingPDF ? 'Generating...' : 'Download Card'}
+            </button>
+            <button
+              onClick={handleShareCard}
+              className="flex items-center justify-center gap-1.5 h-9 px-3 text-xs font-medium border border-hairline rounded-lg hover:bg-canvas-soft-2 hover:border-hairline-strong transition-all active:scale-[0.97]"
+            >
+              <Share2 size={13} />
+              Share
+            </button>
+          </div>
 
           {/* Details */}
           <div className="mt-4 pt-4 border-t border-hairline/60 space-y-2.5">
@@ -260,7 +351,7 @@ export default function StudentProfile() {
               >
                 <div className="flex items-center gap-2.5">
                   <div className="w-8 h-8 rounded-lg bg-success/10 flex items-center justify-center">
-                    <IndianRupee size={13} className="text-success" />
+                    <CreditCard size={13} className="text-success" />
                   </div>
                   <div>
                     <p className="text-sm font-semibold text-ink">₹{payment.amount}</p>
@@ -278,13 +369,5 @@ export default function StudentProfile() {
         )}
       </div>
     </div>
-  )
-}
-
-function IndianRupee(props) {
-  return (
-    <svg xmlns="http://www.w3.org/2000/svg" width={props.size || 24} height={props.size || 24} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={props.className}>
-      <path d="M6 3h12"/><path d="M6 8h12"/><path d="m6 13 8.5 8"/><path d="M6 13h3"/><path d="M9 13c6.667 0 6.667-10 0-10"/>
-    </svg>
   )
 }

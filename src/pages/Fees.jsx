@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
 import { useAuth } from '../contexts/AuthContext'
+import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { DEMO_MODE, mockStudents, mockFeePayments } from '../lib/mockData'
-import { Search, AlertTriangle, IndianRupee, X, MessageCircle } from 'lucide-react'
+import { Search, AlertTriangle, IndianRupee, X, MessageCircle, QrCode } from 'lucide-react'
 
 export default function Fees() {
   const { ownerProfile } = useAuth()
@@ -203,6 +204,13 @@ export default function Fees() {
                   <IndianRupee size={11} />
                   Record Pay
                 </button>
+                <Link
+                  to={`/fees/pay/${student.id}`}
+                  className="flex items-center gap-1.5 h-8 px-3 text-xs font-medium border border-hairline rounded-lg hover:bg-canvas-soft-2 hover:border-hairline-strong transition-all active:scale-[0.97]"
+                >
+                  <QrCode size={11} />
+                  UPI
+                </Link>
                 {(student.status === 'expired' || student.status === 'expiring') && student.phone && (
                   <button
                     onClick={() => sendWhatsAppReminder(student)}

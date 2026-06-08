@@ -13,6 +13,7 @@ const Attendance = lazy(() => import('./pages/Attendance'))
 const Fees = lazy(() => import('./pages/Fees'))
 const Settings = lazy(() => import('./pages/Settings'))
 const ScanEntry = lazy(() => import('./pages/ScanEntry'))
+const PayStudent = lazy(() => import('./pages/PayStudent'))
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth()
@@ -67,6 +68,7 @@ function AppRoutes() {
         <Route path="students/:id" element={<StudentProfile />} />
         <Route path="attendance" element={<Attendance />} />
         <Route path="fees" element={<Fees />} />
+        <Route path="fees/pay/:studentId" element={<PayStudent />} />
         <Route path="settings" element={<Settings />} />
       </Route>
     </Routes>
