@@ -4,6 +4,7 @@ import { AuthProvider, useAuth } from './contexts/AuthContext'
 import Layout from './components/Layout'
 
 const Login = lazy(() => import('./pages/Login'))
+const Signup = lazy(() => import('./pages/Signup'))
 const Setup = lazy(() => import('./pages/Setup'))
 const Dashboard = lazy(() => import('./pages/Dashboard'))
 const Students = lazy(() => import('./pages/Students'))
@@ -53,6 +54,7 @@ function AppRoutes() {
     <Suspense fallback={<PageLoader />}>
     <Routes>
       <Route path="/login" element={user ? <Navigate to="/" replace /> : <Login />} />
+      <Route path="/signup" element={user ? <Navigate to="/" replace /> : <Signup />} />
       <Route path="/scan/:ownerId" element={<ScanEntry />} />
       <Route path="/setup" element={
         <ProtectedRoute><Setup /></ProtectedRoute>

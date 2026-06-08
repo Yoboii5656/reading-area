@@ -3,40 +3,28 @@ import { supabase } from '../lib/supabase'
 
 const AuthContext = createContext(null)
 
-// Demo mode - set to true to bypass login and see all pages with mock data
-const DEMO_MODE = true
-
-const DEMO_OWNER = {
-  id: 'demo-owner-001',
-  name: 'Rajesh Kumar',
-  phone: '9876543210',
-  reading_area_name: 'Sunrise Reading Zone',
-  address: '123 Main Street, Indore',
-  monthly_fee: 500,
-  upi_qr_url: null,
-  plan: 'basic',
-  created_at: '2026-01-15T00:00:00Z',
-}
-
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(DEMO_MODE ? { id: 'demo-owner-001', phone: '9876543210' } : null)
-  const [ownerProfile, setOwnerProfile] = useState(DEMO_MODE ? DEMO_OWNER : null)
-  const [loading, setLoading] = useState(false)
+  const [user, setUser] = useState(null)
+  const [ownerProfile, setOwnerProfile] = useState(null)
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    if (DEMO_MODE) return
-
-    setLoading(true)
+    // Get initial session
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null)
-      if (session?.user) fetchOwnerProfile(session.user.id)
-      else setLoading(false)
+      if (session?.user) {
+        fetchOwnerProfile(session.user.id)
+      } else {
+        setLoading(false)
+      }
     })
 
+    // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null)
-      if (session?.user) fetchOwnerProfile(session.user.id)
-      else {
+      if (session?.user) {
+        fetchOwnerProfile(session.user.id)
+      } else {
         setOwnerProfile(null)
         setLoading(false)
       }
@@ -52,28 +40,44 @@ export function AuthProvider({ children }) {
       .eq('id', userId)
       .single()
 
-    if (!error && data) setOwnerProfile(data)
+    if (!error && data) {
+      setOwnerProfile(data)
+    }
     setLoading(false)
   }
 
-  async function signInWithOtp(phone) {
-    if (DEMO_MODE) return { error: null }
-    const { error } = await supabase.auth.signInWithOtp({ phone })
-    return { error }
-  }
-
-  async function verifyOtp(phone, token) {
-    if (DEMO_MODE) return { data: { user: { id: 'demo-owner-001' } }, error: null }
-    const { data, error } = await supabase.auth.verifyOtp({
-      phone,
-      token,
-      type: 'sms'
+  async function signIn(email, password) {
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
     })
     return { data, error }
   }
 
+  async function signUp(email, password, name) {
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: {
+          full_name: name,
+        },
+      },
+    })
+
+    if (error) {
+      return { error, needsConfirmation: false }
+    }
+
+    // If email confirmation is enabled, user won't have a session yet
+    if (data?.user && !data.session) {
+      return { error: null, needsConfirmation: true }
+    }
+
+    return { data, error: null, needsConfirmation: false }
+  }
+
   async function signOut() {
-    if (DEMO_MODE) return
     await supabase.auth.signOut()
     setUser(null)
     setOwnerProfile(null)
@@ -84,10 +88,10 @@ export function AuthProvider({ children }) {
       user,
       ownerProfile,
       loading,
-      signInWithOtp,
-      verifyOtp,
+      signIn,
+      signUp,
       signOut,
-      setOwnerProfile
+      setOwnerProfile,
     }}>
       {children}
     </AuthContext.Provider>

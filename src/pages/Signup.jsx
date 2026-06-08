@@ -2,28 +2,71 @@ import { useState } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { useNavigate, Link } from 'react-router-dom'
 
-export default function Login() {
+export default function Signup() {
+  const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const { signIn } = useAuth()
+  const [success, setSuccess] = useState(false)
+  const { signUp } = useAuth()
   const navigate = useNavigate()
 
-  async function handleLogin(e) {
+  async function handleSignup(e) {
     e.preventDefault()
     setError('')
+
+    if (password !== confirmPassword) {
+      setError('Passwords do not match')
+      return
+    }
+
+    if (password.length < 6) {
+      setError('Password must be at least 6 characters')
+      return
+    }
+
     setLoading(true)
 
-    const { error } = await signIn(email, password)
+    const { error, needsConfirmation } = await signUp(email, password, name)
 
     if (error) {
       setError(error.message)
+    } else if (needsConfirmation) {
+      setSuccess(true)
     } else {
       navigate('/')
     }
     setLoading(false)
+  }
+
+  if (success) {
+    return (
+      <div className="min-h-screen flex items-center justify-center px-5 bg-gradient-mesh">
+        <div className="w-full max-w-sm animate-slide-up">
+          <div className="bg-canvas rounded-2xl p-6 shadow-card border border-hairline/50 text-center">
+            <div className="w-14 h-14 mx-auto mb-4 bg-success/10 rounded-full flex items-center justify-center">
+              <svg className="w-7 h-7 text-success" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+            </div>
+            <h2 className="text-xl font-semibold text-ink mb-2">Check your email</h2>
+            <p className="text-sm text-body mb-4">
+              We've sent a confirmation link to <span className="font-medium text-ink">{email}</span>. 
+              Click the link to activate your account.
+            </p>
+            <Link
+              to="/login"
+              className="inline-block w-full h-11 leading-[2.75rem] bg-primary text-on-primary text-sm font-medium rounded-xl hover:bg-ink/90 transition-all text-center"
+            >
+              Back to Login
+            </Link>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -38,12 +81,28 @@ export default function Login() {
             </div>
           </div>
           <h1 className="text-2xl font-semibold tracking-[-0.8px] text-ink">Reading Area</h1>
-          <p className="text-body text-sm mt-1">Sign in to manage your reading area</p>
+          <p className="text-body text-sm mt-1">Create your account to get started</p>
         </div>
 
-        {/* Login Card */}
+        {/* Signup Card */}
         <div className="bg-canvas rounded-2xl p-6 shadow-card border border-hairline/50">
-          <form onSubmit={handleLogin}>
+          <form onSubmit={handleSignup}>
+            <div className="mb-4">
+              <label htmlFor="name" className="block text-sm font-medium text-ink mb-2">
+                Full Name
+              </label>
+              <input
+                id="name"
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Rajesh Kumar"
+                className="w-full h-11 px-3.5 border border-hairline rounded-lg text-sm bg-canvas text-ink placeholder:text-mute/60 focus:outline-none focus:ring-2 focus:ring-link/20 focus:border-link transition-all"
+                required
+                autoComplete="name"
+              />
+            </div>
+
             <div className="mb-4">
               <label htmlFor="email" className="block text-sm font-medium text-ink mb-2">
                 Email Address
@@ -70,10 +129,10 @@ export default function Login() {
                   type={showPassword ? 'text' : 'password'}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••"
+                  placeholder="Min. 6 characters"
                   className="w-full h-11 px-3.5 pr-10 border border-hairline rounded-lg text-sm bg-canvas text-ink placeholder:text-mute/60 focus:outline-none focus:ring-2 focus:ring-link/20 focus:border-link transition-all"
                   required
-                  autoComplete="current-password"
+                  autoComplete="new-password"
                   minLength={6}
                 />
                 <button
@@ -96,6 +155,23 @@ export default function Login() {
               </div>
             </div>
 
+            <div className="mb-4">
+              <label htmlFor="confirmPassword" className="block text-sm font-medium text-ink mb-2">
+                Confirm Password
+              </label>
+              <input
+                id="confirmPassword"
+                type={showPassword ? 'text' : 'password'}
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                placeholder="Re-enter your password"
+                className="w-full h-11 px-3.5 border border-hairline rounded-lg text-sm bg-canvas text-ink placeholder:text-mute/60 focus:outline-none focus:ring-2 focus:ring-link/20 focus:border-link transition-all"
+                required
+                autoComplete="new-password"
+                minLength={6}
+              />
+            </div>
+
             {error && (
               <p className="text-error text-xs mb-3 flex items-center gap-1">
                 <span className="w-1 h-1 rounded-full bg-error" />
@@ -105,30 +181,30 @@ export default function Login() {
 
             <button
               type="submit"
-              disabled={loading || !email || password.length < 6}
+              disabled={loading || !name || !email || password.length < 6 || !confirmPassword}
               className="w-full h-11 mt-2 bg-primary text-on-primary text-sm font-medium rounded-xl hover:bg-ink/90 transition-all disabled:opacity-40 disabled:cursor-not-allowed active:scale-[0.98]"
             >
               {loading ? (
                 <span className="flex items-center justify-center gap-2">
                   <div className="w-3.5 h-3.5 border-2 border-on-primary/30 border-t-on-primary rounded-full animate-spin" />
-                  Signing in...
+                  Creating account...
                 </span>
-              ) : 'Sign In'}
+              ) : 'Create Account'}
             </button>
           </form>
 
           <div className="mt-5 pt-5 border-t border-hairline/50 text-center">
             <p className="text-sm text-body">
-              Don't have an account?{' '}
-              <Link to="/signup" className="text-link font-medium hover:text-link-deep transition-colors">
-                Sign Up
+              Already have an account?{' '}
+              <Link to="/login" className="text-link font-medium hover:text-link-deep transition-colors">
+                Sign In
               </Link>
             </p>
           </div>
         </div>
 
         <p className="text-xs text-mute text-center mt-6">
-          Secure login powered by Supabase Auth
+          Secure signup powered by Supabase Auth
         </p>
       </div>
     </div>
