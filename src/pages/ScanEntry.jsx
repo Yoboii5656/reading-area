@@ -64,7 +64,7 @@ export default function ScanEntry() {
       const now = new Date().toISOString()
 
       // Check if there's an active (open) session
-      const { data: openLog } = await supabase
+      const { data: openLog, error: openLogError } = await supabase
         .from('attendance_logs')
         .select('id, entry_time')
         .eq('student_id', student.id)
@@ -72,10 +72,11 @@ export default function ScanEntry() {
         .is('exit_time', null)
         .order('entry_time', { ascending: false })
         .limit(1)
+        .maybeSingle()
 
-      if (openLog && openLog.length > 0) {
+      if (openLog) {
         // Active session exists → mark EXIT
-        const log = openLog[0]
+        const log = openLog
         const duration = Math.round((Date.now() - new Date(log.entry_time).getTime()) / (1000 * 60))
         const hours = Math.floor(duration / 60)
         const mins = duration % 60
