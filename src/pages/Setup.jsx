@@ -1,11 +1,11 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Navigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
 import { DEMO_MODE } from '../lib/mockData'
 
 export default function Setup() {
-  const { user, setOwnerProfile } = useAuth()
+  const { user, ownerProfile, setOwnerProfile } = useAuth()
   const navigate = useNavigate()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -16,6 +16,11 @@ export default function Setup() {
     address: '',
     monthly_fee: '',
   })
+
+  // If profile already exists, skip setup entirely
+  if (ownerProfile) {
+    return <Navigate to="/" replace />
+  }
 
   function handleChange(e) {
     setForm(prev => ({ ...prev, [e.target.name]: e.target.value }))

@@ -1,7 +1,10 @@
 import { createContext, useContext, useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
+import { DEMO_MODE } from '../lib/mockData'
 
 const AuthContext = createContext(null)
+
+const OWNER_PROFILE_KEY = 'reading_area_owner_profile'
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null)
@@ -9,6 +12,22 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    if (DEMO_MODE) {
+      // In demo mode, use a fake user and load profile from localStorage
+      const demoUser = { id: 'demo-owner', email: 'demo@example.com' }
+      setUser(demoUser)
+      const saved = localStorage.getItem(OWNER_PROFILE_KEY)
+      if (saved) {
+        try {
+          setOwnerProfile(JSON.parse(saved))
+        } catch (e) {
+          console.warn('Failed to parse saved owner profile')
+        }
+      }
+      setLoading(false)
+      return
+    }
+
     // Get initial session
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null)
@@ -45,6 +64,7 @@ export function AuthProvider({ children }) {
     }
     if (data) {
       setOwnerProfile(data)
+      localStorage.setItem(OWNER_PROFILE_KEY, JSON.stringify(data))
     }
     setLoading(false)
   }
@@ -80,10 +100,22 @@ export function AuthProvider({ children }) {
     return { data, error: null, needsConfirmation: false }
   }
 
+  function updateOwnerProfile(profile) {
+    setOwnerProfile(profile)
+    if (profile) {
+      localStorage.setItem(OWNER_PROFILE_KEY, JSON.stringify(profile))
+    } else {
+      localStorage.removeItem(OWNER_PROFILE_KEY)
+    }
+  }
+
   async function signOut() {
-    await supabase.auth.signOut()
+    if (!DEMO_MODE) {
+      await supabase.auth.signOut()
+    }
     setUser(null)
     setOwnerProfile(null)
+    localStorage.removeItem(OWNER_PROFILE_KEY)
   }
 
   return (
@@ -94,7 +126,7 @@ export function AuthProvider({ children }) {
       signIn,
       signUp,
       signOut,
-      setOwnerProfile,
+      setOwnerProfile: updateOwnerProfile,
     }}>
       {children}
     </AuthContext.Provider>
