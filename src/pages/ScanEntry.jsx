@@ -1,7 +1,7 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
-import { LogIn, LogOut, CheckCircle, BookOpen } from 'lucide-react'
+import { LogIn, LogOut, CheckCircle, BookOpen, Scan } from 'lucide-react'
 
 export default function ScanEntry() {
   const { ownerId } = useParams()
@@ -9,18 +9,45 @@ export default function ScanEntry() {
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState(null)
   const [error, setError] = useState('')
+  const [savedId, setSavedId] = useState('')
 
-  async function handleAction(action) {
+  // Load saved student ID from localStorage on mount
+  useEffect(() => {
+    const stored = localStorage.getItem(`ra_student_id_${ownerId}`)
+    if (stored) {
+      setStudentId(stored)
+      setSavedId(stored)
+    }
+  }, [ownerId])
+
+  // Save student ID to localStorage
+  function saveStudentId(id) {
+    const upperId = id.toUpperCase()
+    localStorage.setItem(`ra_student_id_${ownerId}`, upperId)
+    setSavedId(upperId)
+  }
+
+  // Clear saved ID
+  function clearSavedId() {
+    localStorage.removeItem(`ra_student_id_${ownerId}`)
+    setSavedId('')
+    setStudentId('')
+  }
+
+  // Auto-detect entry/exit: if active session exists → exit, otherwise → entry
+  async function handleScan() {
     setError('')
     setLoading(true)
     setResult(null)
 
     try {
+      const idToUse = studentId.toUpperCase()
+
       const { data: student, error: findError } = await supabase
         .from('students')
         .select('id, name, student_id')
         .eq('owner_id', ownerId)
-        .eq('student_id', studentId.toUpperCase())
+        .eq('student_id', idToUse)
         .eq('is_active', true)
         .single()
 
@@ -30,24 +57,42 @@ export default function ScanEntry() {
         return
       }
 
+      // Save ID to localStorage on successful lookup
+      saveStudentId(idToUse)
+
       const today = new Date().toISOString().split('T')[0]
       const now = new Date().toISOString()
 
-      if (action === 'entry') {
-        const { data: existing } = await supabase
+      // Check if there's an active (open) session
+      const { data: openLog } = await supabase
+        .from('attendance_logs')
+        .select('id, entry_time')
+        .eq('student_id', student.id)
+        .eq('date', today)
+        .is('exit_time', null)
+        .order('entry_time', { ascending: false })
+        .limit(1)
+
+      if (openLog && openLog.length > 0) {
+        // Active session exists → mark EXIT
+        const log = openLog[0]
+        const duration = Math.round((Date.now() - new Date(log.entry_time).getTime()) / (1000 * 60))
+        const hours = Math.floor(duration / 60)
+        const mins = duration % 60
+
+        await supabase
           .from('attendance_logs')
-          .select('id')
-          .eq('student_id', student.id)
-          .eq('date', today)
-          .is('exit_time', null)
-          .limit(1)
+          .update({ exit_time: now, duration_minutes: duration })
+          .eq('id', log.id)
 
-        if (existing && existing.length > 0) {
-          setError('You are already marked as inside. Please exit first.')
-          setLoading(false)
-          return
-        }
-
+        setResult({
+          type: 'exit',
+          name: student.name,
+          time: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }),
+          duration: `${hours}h ${mins}m`,
+        })
+      } else {
+        // No active session → mark ENTRY
         await supabase.from('attendance_logs').insert({
           student_id: student.id,
           owner_id: ownerId,
@@ -60,38 +105,6 @@ export default function ScanEntry() {
           type: 'entry',
           name: student.name,
           time: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }),
-        })
-      } else {
-        const { data: openLog } = await supabase
-          .from('attendance_logs')
-          .select('id, entry_time')
-          .eq('student_id', student.id)
-          .eq('date', today)
-          .is('exit_time', null)
-          .order('entry_time', { ascending: false })
-          .limit(1)
-          .single()
-
-        if (!openLog) {
-          setError('No active entry found. Please mark entry first.')
-          setLoading(false)
-          return
-        }
-
-        const duration = Math.round((Date.now() - new Date(openLog.entry_time).getTime()) / (1000 * 60))
-        const hours = Math.floor(duration / 60)
-        const mins = duration % 60
-
-        await supabase
-          .from('attendance_logs')
-          .update({ exit_time: now, duration_minutes: duration })
-          .eq('id', openLog.id)
-
-        setResult({
-          type: 'exit',
-          name: student.name,
-          time: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }),
-          duration: `${hours}h ${mins}m`,
         })
       }
     } catch (err) {
@@ -122,7 +135,7 @@ export default function ScanEntry() {
             }
           </p>
           <button
-            onClick={() => { setResult(null); setStudentId('') }}
+            onClick={() => setResult(null)}
             className="mt-8 h-10 px-6 text-sm font-medium border border-hairline rounded-xl hover:bg-canvas-soft-2 hover:border-hairline-strong transition-all active:scale-[0.97]"
           >
             Done
@@ -144,7 +157,7 @@ export default function ScanEntry() {
             </div>
           </div>
           <h1 className="text-xl font-semibold tracking-[-0.6px] text-ink">Reading Area</h1>
-          <p className="text-sm text-body mt-0.5">Log your entry or exit</p>
+          <p className="text-sm text-body mt-0.5">Scan to log entry or exit</p>
         </div>
 
         {/* Input Card */}
@@ -162,40 +175,45 @@ export default function ScanEntry() {
             autoComplete="off"
           />
 
+          {savedId && (
+            <div className="flex items-center justify-between mt-2 px-1">
+              <span className="text-xs text-mute">
+                Saved: <span className="font-mono font-medium text-body">{savedId}</span>
+              </span>
+              <button
+                onClick={clearSavedId}
+                className="text-xs text-error/70 hover:text-error transition-colors"
+              >
+                Clear
+              </button>
+            </div>
+          )}
+
           {error && (
             <p className="text-error text-xs mt-3 text-center bg-error-soft/50 p-2 rounded-lg">
               {error}
             </p>
           )}
 
-          <div className="grid grid-cols-2 gap-3 mt-5">
-            <button
-              onClick={() => handleAction('entry')}
-              disabled={loading || !studentId}
-              className="flex items-center justify-center gap-2 h-12 bg-primary text-on-primary text-sm font-medium rounded-xl hover:bg-ink/90 transition-all disabled:opacity-40 disabled:cursor-not-allowed active:scale-[0.97]"
-            >
-              {loading ? (
-                <div className="w-4 h-4 border-2 border-on-primary/30 border-t-on-primary rounded-full animate-spin" />
-              ) : (
-                <><LogIn size={16} /> Entry</>
-              )}
-            </button>
-            <button
-              onClick={() => handleAction('exit')}
-              disabled={loading || !studentId}
-              className="flex items-center justify-center gap-2 h-12 border-2 border-primary text-primary text-sm font-medium rounded-xl hover:bg-primary/5 transition-all disabled:opacity-40 disabled:cursor-not-allowed active:scale-[0.97]"
-            >
-              {loading ? (
-                <div className="w-4 h-4 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
-              ) : (
-                <><LogOut size={16} /> Exit</>
-              )}
-            </button>
-          </div>
+          <button
+            onClick={handleScan}
+            disabled={loading || !studentId}
+            className="flex items-center justify-center gap-2 w-full h-12 mt-5 bg-primary text-on-primary text-sm font-medium rounded-xl hover:bg-ink/90 transition-all disabled:opacity-40 disabled:cursor-not-allowed active:scale-[0.97]"
+          >
+            {loading ? (
+              <div className="w-4 h-4 border-2 border-on-primary/30 border-t-on-primary rounded-full animate-spin" />
+            ) : (
+              <><Scan size={16} /> Log Attendance</>
+            )}
+          </button>
+
+          <p className="text-xs text-mute text-center mt-4 leading-relaxed">
+            Auto-detects entry or exit. First scan = entry, second scan = exit.
+          </p>
         </div>
 
         <p className="text-xs text-mute text-center mt-5 leading-relaxed max-w-[260px] mx-auto">
-          Enter the Student ID from your printed card and tap Entry or Exit. No account needed.
+          Your ID is saved on this device so you won't need to type it again next time.
         </p>
       </div>
     </div>
