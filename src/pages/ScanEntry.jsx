@@ -195,7 +195,7 @@ export default function ScanEntry() {
         </div>
 
         <p className="text-xs text-mute text-center mt-5 leading-relaxed max-w-[260px] mx-auto">
-          Enter the Student ID from your printed card and tap Entry or Exit.
+          Enter the Student ID from your printed card and tap Entry or Exit. No account needed.
         </p>
       </div>
     </div>

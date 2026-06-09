@@ -81,7 +81,14 @@ export default function Signup() {
             </div>
           </div>
           <h1 className="text-2xl font-semibold tracking-[-0.8px] text-ink">Reading Area</h1>
-          <p className="text-body text-sm mt-1">Create your account to get started</p>
+          <p className="text-body text-sm mt-1">Create your owner account to get started</p>
+        </div>
+
+        {/* Student Notice */}
+        <div className="bg-canvas-soft-2 border border-hairline rounded-xl px-4 py-3 mb-4 text-center">
+          <p className="text-xs text-body">
+            <span className="font-medium text-ink">📚 Student?</span> You don't need an account. Just scan the QR code at your reading area to mark attendance.
+          </p>
         </div>
 
         {/* Signup Card */}

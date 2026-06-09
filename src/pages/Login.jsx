@@ -41,6 +41,13 @@ export default function Login() {
           <p className="text-body text-sm mt-1">Sign in to manage your reading area</p>
         </div>
 
+        {/* Student Notice */}
+        <div className="bg-canvas-soft-2 border border-hairline rounded-xl px-4 py-3 mb-4 text-center">
+          <p className="text-xs text-body">
+            <span className="font-medium text-ink">📚 Student?</span> You don't need an account. Just scan the QR code at your reading area to mark attendance.
+          </p>
+        </div>
+
         {/* Login Card */}
         <div className="bg-canvas rounded-2xl p-6 shadow-card border border-hairline/50">
           <form onSubmit={handleLogin}>
@@ -124,6 +131,7 @@ export default function Login() {
                 Sign Up
               </Link>
             </p>
+            <p className="text-xs text-mute mt-2">For reading area owners only</p>
           </div>
         </div>
 
