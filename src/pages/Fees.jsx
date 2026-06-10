@@ -3,7 +3,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { DEMO_MODE, mockStudents, mockFeePayments } from '../lib/mockData'
-import { Search, AlertTriangle, IndianRupee, X, MessageCircle, QrCode } from 'lucide-react'
+import { Search, AlertTriangle, IndianRupee, X, MessageCircle, QrCode, ChevronDown, ChevronUp, History } from 'lucide-react'
 
 export default function Fees() {
   const { ownerProfile } = useAuth()
@@ -13,6 +13,9 @@ export default function Fees() {
   const [showPayModal, setShowPayModal] = useState(null)
   const [payForm, setPayForm] = useState({ amount: '', method: 'cash', note: '' })
   const [paying, setPaying] = useState(false)
+  const [expandedStudent, setExpandedStudent] = useState(null)
+  const [paymentHistory, setPaymentHistory] = useState([])
+  const [loadingHistory, setLoadingHistory] = useState(false)
 
   useEffect(() => {
     if (ownerProfile) fetchStudentsWithFees()
@@ -112,6 +115,34 @@ export default function Fees() {
     window.open(`https://wa.me/91${student.phone}?text=${message}`, '_blank')
   }
 
+  async function togglePaymentHistory(studentId) {
+    if (expandedStudent === studentId) {
+      setExpandedStudent(null)
+      setPaymentHistory([])
+      return
+    }
+
+    setExpandedStudent(studentId)
+    setLoadingHistory(true)
+
+    if (DEMO_MODE) {
+      const history = mockFeePayments.filter(p => p.student_id === studentId)
+      setPaymentHistory(history)
+      setLoadingHistory(false)
+      return
+    }
+
+    const { data } = await supabase
+      .from('fee_payments')
+      .select('*')
+      .eq('student_id', studentId)
+      .eq('owner_id', ownerProfile.id)
+      .order('paid_on', { ascending: false })
+
+    setPaymentHistory(data || [])
+    setLoadingHistory(false)
+  }
+
   const filtered = students.filter(s =>
     s.name.toLowerCase().includes(search.toLowerCase()) ||
     s.student_id.toLowerCase().includes(search.toLowerCase())
@@ -170,57 +201,113 @@ export default function Fees() {
           {filtered.map((student) => (
             <div
               key={student.id}
-              className="bg-canvas rounded-xl border border-hairline p-4 shadow-card hover:shadow-card-hover transition-shadow"
+              className="bg-canvas rounded-xl border border-hairline shadow-card hover:shadow-card-hover transition-shadow overflow-hidden"
             >
-              <div className="flex items-start justify-between mb-2">
-                <div className="flex items-center gap-2.5">
-                  <div className={`w-2 h-2 rounded-full ${statusConfig[student.status].dot}`} />
-                  <div>
-                    <p className="text-sm font-medium text-ink">{student.name}</p>
-                    <p className="text-[11px] text-mute font-mono">{student.student_id}</p>
+              <div
+                className="p-4 cursor-pointer"
+                onClick={() => togglePaymentHistory(student.id)}
+              >
+                <div className="flex items-start justify-between mb-2">
+                  <div className="flex items-center gap-2.5">
+                    <div className={`w-2 h-2 rounded-full ${statusConfig[student.status].dot}`} />
+                    <div>
+                      <p className="text-sm font-medium text-ink">{student.name}</p>
+                      <p className="text-[11px] text-mute font-mono">{student.student_id}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${statusConfig[student.status].badge}`}>
+                      {statusConfig[student.status].label}
+                    </span>
+                    {expandedStudent === student.id ? (
+                      <ChevronUp size={14} className="text-mute" />
+                    ) : (
+                      <ChevronDown size={14} className="text-mute" />
+                    )}
                   </div>
                 </div>
-                <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${statusConfig[student.status].badge}`}>
-                  {statusConfig[student.status].label}
-                </span>
-              </div>
 
-              {student.lastPayment && (
-                <p className="text-xs text-mute mb-3 pl-[18px]">
-                  ₹{student.lastPayment.amount} · {new Date(student.lastPayment.paid_on).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
-                  {' → '}
-                  {new Date(student.lastPayment.valid_until).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
-                </p>
-              )}
+                {student.lastPayment && (
+                  <p className="text-xs text-mute mb-3 pl-[18px]">
+                    ₹{student.lastPayment.amount} · {new Date(student.lastPayment.paid_on).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
+                    {' → '}
+                    {new Date(student.lastPayment.valid_until).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
+                  </p>
+                )}
 
-              <div className="flex gap-2 pl-[18px]">
-                <button
-                  onClick={() => {
-                    setShowPayModal(student)
-                    setPayForm({ amount: ownerProfile.monthly_fee || '', method: 'cash', note: '' })
-                  }}
-                  className="flex items-center gap-1.5 h-8 px-3 text-xs font-medium bg-primary text-on-primary rounded-lg hover:bg-ink/90 transition-all active:scale-[0.97]"
-                >
-                  <IndianRupee size={11} />
-                  Record Pay
-                </button>
-                <Link
-                  to={`/fees/pay/${student.id}`}
-                  className="flex items-center gap-1.5 h-8 px-3 text-xs font-medium border border-hairline rounded-lg hover:bg-canvas-soft-2 hover:border-hairline-strong transition-all active:scale-[0.97]"
-                >
-                  <QrCode size={11} />
-                  UPI
-                </Link>
-                {(student.status === 'expired' || student.status === 'expiring') && student.phone && (
+                <div className="flex gap-2 pl-[18px]" onClick={(e) => e.stopPropagation()}>
                   <button
-                    onClick={() => sendWhatsAppReminder(student)}
+                    onClick={() => {
+                      setShowPayModal(student)
+                      setPayForm({ amount: ownerProfile.monthly_fee || '', method: 'cash', note: '' })
+                    }}
+                    className="flex items-center gap-1.5 h-8 px-3 text-xs font-medium bg-primary text-on-primary rounded-lg hover:bg-ink/90 transition-all active:scale-[0.97]"
+                  >
+                    <IndianRupee size={11} />
+                    Record Pay
+                  </button>
+                  <Link
+                    to={`/fees/pay/${student.id}`}
                     className="flex items-center gap-1.5 h-8 px-3 text-xs font-medium border border-hairline rounded-lg hover:bg-canvas-soft-2 hover:border-hairline-strong transition-all active:scale-[0.97]"
                   >
-                    <MessageCircle size={11} />
-                    Remind
-                  </button>
-                )}
+                    <QrCode size={11} />
+                    UPI
+                  </Link>
+                  {(student.status === 'expired' || student.status === 'expiring') && student.phone && (
+                    <button
+                      onClick={() => sendWhatsAppReminder(student)}
+                      className="flex items-center gap-1.5 h-8 px-3 text-xs font-medium border border-hairline rounded-lg hover:bg-canvas-soft-2 hover:border-hairline-strong transition-all active:scale-[0.97]"
+                    >
+                      <MessageCircle size={11} />
+                      Remind
+                    </button>
+                  )}
+                </div>
               </div>
+
+              {/* Payment History Dropdown */}
+              {expandedStudent === student.id && (
+                <div className="border-t border-hairline bg-canvas-soft-2/50 px-4 py-3 animate-fade-in">
+                  <div className="flex items-center gap-1.5 mb-2.5">
+                    <History size={12} className="text-mute" />
+                    <p className="text-[11px] font-semibold text-mute uppercase tracking-wide">Payment History</p>
+                  </div>
+
+                  {loadingHistory ? (
+                    <div className="space-y-2">
+                      {[1,2].map(i => <div key={i} className="h-10 bg-canvas rounded-lg animate-shimmer" />)}
+                    </div>
+                  ) : paymentHistory.length === 0 ? (
+                    <p className="text-xs text-mute py-2">No payment records found.</p>
+                  ) : (
+                    <div className="space-y-1.5">
+                      {paymentHistory.map((payment, idx) => (
+                        <div
+                          key={payment.id || idx}
+                          className="flex items-center justify-between bg-canvas rounded-lg border border-hairline px-3 py-2.5"
+                        >
+                          <div>
+                            <p className="text-sm font-medium text-ink">₹{payment.amount}</p>
+                            <p className="text-[11px] text-mute">
+                              {new Date(payment.paid_on).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                              {' → '}
+                              {new Date(payment.valid_until).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                            </p>
+                          </div>
+                          <div className="text-right">
+                            <span className="text-[10px] font-medium text-mute uppercase bg-canvas-soft-2 px-1.5 py-0.5 rounded">
+                              {payment.payment_method || '—'}
+                            </span>
+                            {payment.note && (
+                              <p className="text-[10px] text-mute mt-0.5 max-w-[120px] truncate">{payment.note}</p>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           ))}
         </div>
