@@ -197,6 +197,13 @@ create policy "Owners can upload student files"
     auth.uid()::text = (storage.foldername(name))[1]
   );
 
+create policy "Owners can update student files"
+  on storage.objects for update
+  using (
+    bucket_id = 'student-files' and
+    auth.uid()::text = (storage.foldername(name))[1]
+  );
+
 create policy "Public can view student files"
   on storage.objects for select
   using (bucket_id = 'student-files');
@@ -211,6 +218,13 @@ create policy "Owners can delete student files"
 create policy "Owners can upload own files"
   on storage.objects for insert
   with check (
+    bucket_id = 'owner-files' and
+    auth.uid()::text = (storage.foldername(name))[1]
+  );
+
+create policy "Owners can update own files"
+  on storage.objects for update
+  using (
     bucket_id = 'owner-files' and
     auth.uid()::text = (storage.foldername(name))[1]
   );
