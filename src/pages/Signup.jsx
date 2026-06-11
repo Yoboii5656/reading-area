@@ -7,16 +7,22 @@ export default function Signup() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
+  const [superPassword, setSuperPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const [success, setSuccess] = useState(false)
   const { signUp } = useAuth()
   const navigate = useNavigate()
 
   async function handleSignup(e) {
     e.preventDefault()
     setError('')
+
+    // Check super password first
+    if (superPassword !== import.meta.env.VITE_SIGNUP_SECRET) {
+      setError('Invalid access code. Only authorized users can create accounts.')
+      return
+    }
 
     if (password !== confirmPassword) {
       setError('Passwords do not match')
@@ -30,43 +36,14 @@ export default function Signup() {
 
     setLoading(true)
 
-    const { error, needsConfirmation } = await signUp(email, password, name)
+    const { error } = await signUp(email, password, name)
 
     if (error) {
       setError(error.message)
-    } else if (needsConfirmation) {
-      setSuccess(true)
     } else {
       navigate('/')
     }
     setLoading(false)
-  }
-
-  if (success) {
-    return (
-      <div className="min-h-screen flex items-center justify-center px-5 bg-gradient-mesh">
-        <div className="w-full max-w-sm animate-slide-up">
-          <div className="bg-canvas rounded-2xl p-6 shadow-card border border-hairline/50 text-center">
-            <div className="w-14 h-14 mx-auto mb-4 bg-success/10 rounded-full flex items-center justify-center">
-              <svg className="w-7 h-7 text-success" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-              </svg>
-            </div>
-            <h2 className="text-xl font-semibold text-ink mb-2">Check your email</h2>
-            <p className="text-sm text-body mb-4">
-              We've sent a confirmation link to <span className="font-medium text-ink">{email}</span>. 
-              Click the link to activate your account.
-            </p>
-            <Link
-              to="/login"
-              className="inline-block w-full h-11 leading-[2.75rem] bg-primary text-on-primary text-sm font-medium rounded-xl hover:bg-ink/90 transition-all text-center"
-            >
-              Back to Login
-            </Link>
-          </div>
-        </div>
-      </div>
-    )
   }
 
   return (
@@ -94,6 +71,23 @@ export default function Signup() {
         {/* Signup Card */}
         <div className="bg-canvas rounded-2xl p-6 shadow-card border border-hairline/50">
           <form onSubmit={handleSignup}>
+            <div className="mb-4">
+              <label htmlFor="superPassword" className="block text-sm font-medium text-ink mb-2">
+                Access Code <span className="text-error">*</span>
+              </label>
+              <input
+                id="superPassword"
+                type="password"
+                value={superPassword}
+                onChange={(e) => setSuperPassword(e.target.value)}
+                placeholder="Enter access code"
+                className="w-full h-11 px-3.5 border border-hairline rounded-lg text-sm bg-canvas text-ink placeholder:text-mute/60 focus:outline-none focus:ring-2 focus:ring-link/20 focus:border-link transition-all"
+                required
+                autoComplete="off"
+              />
+              <p className="text-xs text-mute mt-1">Required to create an account. Contact admin if you don't have it.</p>
+            </div>
+
             <div className="mb-4">
               <label htmlFor="name" className="block text-sm font-medium text-ink mb-2">
                 Full Name
@@ -188,7 +182,7 @@ export default function Signup() {
 
             <button
               type="submit"
-              disabled={loading || !name || !email || password.length < 6 || !confirmPassword}
+              disabled={loading || !name || !email || password.length < 6 || !confirmPassword || !superPassword}
               className="w-full h-11 mt-2 bg-primary text-on-primary text-sm font-medium rounded-xl hover:bg-ink/90 transition-all disabled:opacity-40 disabled:cursor-not-allowed active:scale-[0.98]"
             >
               {loading ? (

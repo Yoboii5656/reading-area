@@ -13,7 +13,7 @@ export default function Layout() {
   return (
     <div className="min-h-screen bg-canvas-soft">
       {/* Main content area with bottom padding for nav */}
-      <main className="w-full max-w-[480px] mx-auto px-5 pt-6 pb-24">
+      <main className="w-full max-w-[480px] mx-auto px-5 pt-12 sm:pt-6 pb-24">
         <Outlet />
       </main>
 

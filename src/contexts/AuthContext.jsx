@@ -85,16 +85,12 @@ export function AuthProvider({ children }) {
         data: {
           full_name: name,
         },
+        emailRedirectTo: undefined,
       },
     })
 
     if (error) {
       return { error, needsConfirmation: false }
-    }
-
-    // If email confirmation is enabled, user won't have a session yet
-    if (data?.user && !data.session) {
-      return { error: null, needsConfirmation: true }
     }
 
     return { data, error: null, needsConfirmation: false }
