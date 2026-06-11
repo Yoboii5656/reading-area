@@ -319,7 +319,7 @@ export default function Fees() {
 
       {/* Payment Modal */}
       {showPayModal && (
-        <div className="fixed inset-0 bg-ink/60 backdrop-blur-sm flex items-end sm:items-center justify-center z-50 p-4 animate-fade-in">
+        <div className="fixed inset-0 bg-ink/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
           <div className="bg-canvas rounded-2xl w-full max-w-sm p-6 shadow-modal animate-slide-up">
             <div className="flex items-center justify-between mb-5">
               <div>
