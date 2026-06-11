@@ -11,7 +11,7 @@ export default function Fees() {
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
   const [showPayModal, setShowPayModal] = useState(null)
-  const [payForm, setPayForm] = useState({ amount: '', method: 'cash', note: '' })
+  const [payForm, setPayForm] = useState({ amount: '', method: 'cash', note: '', fromDate: '', toDate: '' })
   const [paying, setPaying] = useState(false)
   const [expandedStudent, setExpandedStudent] = useState(null)
   const [paymentHistory, setPaymentHistory] = useState([])
@@ -79,13 +79,13 @@ export default function Fees() {
     e.preventDefault()
     setPaying(true)
     const amount = parseFloat(payForm.amount)
-    const validUntil = new Date()
-    validUntil.setDate(validUntil.getDate() + 30)
+    const paidFrom = payForm.fromDate
+    const validUntil = payForm.toDate
 
     if (DEMO_MODE) {
       setStudents(prev => prev.map(s =>
         s.id === showPayModal.id
-          ? { ...s, lastPayment: { amount, paid_on: new Date().toISOString().split('T')[0], valid_until: validUntil.toISOString().split('T')[0] }, status: 'active' }
+          ? { ...s, lastPayment: { amount, paid_on: paidFrom, valid_until: validUntil }, status: 'active' }
           : s
       ))
       setShowPayModal(null)
@@ -97,8 +97,8 @@ export default function Fees() {
       student_id: showPayModal.id,
       owner_id: ownerProfile.id,
       amount,
-      paid_on: new Date().toISOString().split('T')[0],
-      valid_until: validUntil.toISOString().split('T')[0],
+      paid_on: paidFrom,
+      valid_until: validUntil,
       payment_method: payForm.method,
       note: payForm.note,
       recorded_by: ownerProfile.id,
@@ -238,8 +238,12 @@ export default function Fees() {
                 <div className="flex gap-2 pl-[18px]" onClick={(e) => e.stopPropagation()}>
                   <button
                     onClick={() => {
+                      const today = new Date().toISOString().split('T')[0]
+                      const nextMonth = new Date()
+                      nextMonth.setDate(nextMonth.getDate() + 30)
+                      const toDate = nextMonth.toISOString().split('T')[0]
                       setShowPayModal(student)
-                      setPayForm({ amount: ownerProfile.monthly_fee || '', method: 'cash', note: '' })
+                      setPayForm({ amount: ownerProfile.monthly_fee || '', method: 'cash', note: '', fromDate: today, toDate: toDate })
                     }}
                     className="flex items-center gap-1.5 h-8 px-3 text-xs font-medium bg-primary text-on-primary rounded-lg hover:bg-ink/90 transition-all active:scale-[0.97]"
                   >
@@ -342,6 +346,29 @@ export default function Fees() {
                   inputMode="numeric"
                   placeholder="500"
                 />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-body mb-1.5">From Date</label>
+                  <input
+                    type="date"
+                    value={payForm.fromDate}
+                    onChange={(e) => setPayForm(p => ({ ...p, fromDate: e.target.value }))}
+                    required
+                    className="w-full h-10 px-3 border border-hairline rounded-xl text-sm bg-canvas text-ink focus:outline-none focus:ring-2 focus:ring-link/20 focus:border-link transition-all"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-body mb-1.5">To Date</label>
+                  <input
+                    type="date"
+                    value={payForm.toDate}
+                    onChange={(e) => setPayForm(p => ({ ...p, toDate: e.target.value }))}
+                    required
+                    className="w-full h-10 px-3 border border-hairline rounded-xl text-sm bg-canvas text-ink focus:outline-none focus:ring-2 focus:ring-link/20 focus:border-link transition-all"
+                  />
+                </div>
               </div>
 
               <div>
