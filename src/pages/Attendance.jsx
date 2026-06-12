@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
 import { DEMO_MODE, mockAttendanceLogs, mockStudents } from '../lib/mockData'
-import { LogIn, LogOut, QrCode, Clock, Search, X, Pencil } from 'lucide-react'
+import { LogIn, LogOut, QrCode, Clock, Search, X, Pencil, Download, ChevronLeft, ChevronRight } from 'lucide-react'
 import { QRCodeSVG } from 'qrcode.react'
 
 export default function Attendance() {
@@ -16,8 +16,12 @@ export default function Attendance() {
   const [editLog, setEditLog] = useState(null)
   const [editExitTime, setEditExitTime] = useState('')
   const [editSaving, setEditSaving] = useState(false)
+  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0])
+  const [historyLogs, setHistoryLogs] = useState([])
+  const [historyLoading, setHistoryLoading] = useState(false)
 
   const today = new Date().toISOString().split('T')[0]
+  const isToday = selectedDate === today
 
   async function handleEditSave(e) {
     e.preventDefault()
@@ -66,6 +70,67 @@ export default function Attendance() {
       fetchStudents()
     }
   }, [ownerProfile])
+
+  useEffect(() => {
+    if (ownerProfile && !isToday) {
+      fetchHistoryLogs(selectedDate)
+    }
+  }, [selectedDate, ownerProfile])
+
+  async function fetchHistoryLogs(date) {
+    setHistoryLoading(true)
+    if (DEMO_MODE) {
+      setHistoryLogs(mockAttendanceLogs)
+      setHistoryLoading(false)
+      return
+    }
+
+    const { data } = await supabase
+      .from('attendance_logs')
+      .select('*, students(name, student_id)')
+      .eq('owner_id', ownerProfile.id)
+      .eq('date', date)
+      .order('entry_time', { ascending: false })
+
+    setHistoryLogs(data || [])
+    setHistoryLoading(false)
+  }
+
+  function changeDate(offset) {
+    const d = new Date(selectedDate)
+    d.setDate(d.getDate() + offset)
+    if (d <= new Date()) {
+      setSelectedDate(d.toISOString().split('T')[0])
+    }
+  }
+
+  function downloadCSV() {
+    const logs = isToday ? todayLogs : historyLogs
+    if (logs.length === 0) return
+
+    const headers = ['Student Name', 'Student ID', 'Date', 'Entry Time', 'Exit Time', 'Duration (minutes)', 'Method']
+    const rows = logs.map(log => [
+      log.students?.name || '',
+      log.students?.student_id || '',
+      log.date || selectedDate,
+      log.entry_time ? new Date(log.entry_time).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '',
+      log.exit_time ? new Date(log.exit_time).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : 'Still inside',
+      log.duration_minutes != null ? log.duration_minutes : '',
+      log.method || '',
+    ])
+
+    const csvContent = [headers, ...rows]
+      .map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+      .join('\n')
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `attendance-${selectedDate}.csv`
+    link.click()
+    URL.revokeObjectURL(url)
+  }
 
   async function fetchTodayLogs() {
     if (DEMO_MODE) {
@@ -179,19 +244,62 @@ export default function Attendance() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-[22px] font-semibold tracking-[-0.6px] text-ink">Attendance</h1>
-          <p className="text-xs text-mute mt-0.5">{new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'short' })}</p>
+          <p className="text-xs text-mute mt-0.5">{new Date(selectedDate).toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'short' })}</p>
         </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={downloadCSV}
+            disabled={(isToday ? todayLogs : historyLogs).length === 0}
+            className="flex items-center gap-1.5 h-9 px-3.5 text-xs font-medium rounded-xl border border-hairline text-body hover:border-hairline-strong hover:shadow-card transition-all active:scale-[0.97] disabled:opacity-40 disabled:pointer-events-none"
+            title="Download attendance CSV"
+          >
+            <Download size={14} />
+            Download
+          </button>
+          <button
+            onClick={() => setShowDoorQR(!showDoorQR)}
+            className={`flex items-center gap-1.5 h-9 px-3.5 text-xs font-medium rounded-xl transition-all active:scale-[0.97] ${
+              showDoorQR
+                ? 'bg-primary text-on-primary'
+                : 'border border-hairline text-body hover:border-hairline-strong hover:shadow-card'
+            }`}
+          >
+            <QrCode size={14} />
+            Door QR
+          </button>
+        </div>
+      </div>
+
+      {/* Date Navigation */}
+      <div className="flex items-center justify-center gap-3">
         <button
-          onClick={() => setShowDoorQR(!showDoorQR)}
-          className={`flex items-center gap-1.5 h-9 px-3.5 text-xs font-medium rounded-xl transition-all active:scale-[0.97] ${
-            showDoorQR
-              ? 'bg-primary text-on-primary'
-              : 'border border-hairline text-body hover:border-hairline-strong hover:shadow-card'
-          }`}
+          onClick={() => changeDate(-1)}
+          className="p-2 rounded-lg hover:bg-canvas-soft-2 transition-colors text-mute hover:text-body"
         >
-          <QrCode size={14} />
-          Door QR
+          <ChevronLeft size={18} />
         </button>
+        <input
+          type="date"
+          value={selectedDate}
+          max={today}
+          onChange={(e) => setSelectedDate(e.target.value)}
+          className="h-9 px-3 border border-hairline rounded-xl text-sm bg-canvas text-ink focus:outline-none focus:ring-2 focus:ring-link/20 focus:border-link transition-all"
+        />
+        <button
+          onClick={() => changeDate(1)}
+          disabled={selectedDate === today}
+          className="p-2 rounded-lg hover:bg-canvas-soft-2 transition-colors text-mute hover:text-body disabled:opacity-30 disabled:pointer-events-none"
+        >
+          <ChevronRight size={18} />
+        </button>
+        {!isToday && (
+          <button
+            onClick={() => setSelectedDate(today)}
+            className="text-xs font-medium text-link hover:underline"
+          >
+            Today
+          </button>
+        )}
       </div>
 
       {/* Door QR Code Modal */}
@@ -212,7 +320,9 @@ export default function Attendance() {
         </div>
       )}
 
-      {/* Currently Inside */}
+      {/* Currently Inside - only show for today */}
+      {isToday && (
+      <>
       <div>
         <div className="flex items-center gap-2 mb-3">
           <div className="w-2 h-2 bg-success rounded-full animate-pulse" />
@@ -310,9 +420,71 @@ export default function Attendance() {
           </div>
         )}
       </div>
+      </>
+      )}
+
+      {/* Previous Day History */}
+      {!isToday && (
+        <div>
+          <h2 className="text-xs font-semibold text-mute uppercase tracking-wider mb-3">
+            Attendance · {historyLogs.length} records
+          </h2>
+          {historyLoading ? (
+            <div className="bg-canvas rounded-xl border border-hairline p-8 text-center">
+              <p className="text-sm text-mute">Loading...</p>
+            </div>
+          ) : historyLogs.length === 0 ? (
+            <div className="bg-canvas rounded-xl border border-hairline p-8 text-center">
+              <p className="text-sm text-mute">No attendance records for this date</p>
+            </div>
+          ) : (
+            <div className="bg-canvas rounded-xl border border-hairline overflow-hidden shadow-card">
+              {historyLogs.map((log, i) => (
+                <div
+                  key={log.id}
+                  className={`px-4 py-3 flex items-center justify-between ${
+                    i !== historyLogs.length - 1 ? 'border-b border-hairline/60' : ''
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-full bg-canvas-soft-2 flex items-center justify-center">
+                      <span className="text-[10px] font-bold text-mute">
+                        {log.students?.name?.split(' ').map(n => n[0]).join('').slice(0, 2)}
+                      </span>
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-1.5">
+                        <p className="text-sm text-ink">{log.students?.name}</p>
+                        {log.method === 'auto_closed' && (
+                          <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-warning-soft text-warning border border-warning/20">
+                            Auto-closed
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[11px] text-mute font-mono">{log.students?.student_id}</p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-xs text-body">
+                      {log.entry_time ? new Date(log.entry_time).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : '-'}
+                      {' → '}
+                      {log.exit_time ? new Date(log.exit_time).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : 'No exit'}
+                    </p>
+                    {log.duration_minutes != null && (
+                      <p className="text-[11px] text-mute font-medium">
+                        {Math.floor(log.duration_minutes / 60)}h {log.duration_minutes % 60}m
+                      </p>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Completed Today */}
-      {completedLogs.length > 0 && (
+      {isToday && completedLogs.length > 0 && (
         <div>
           <h2 className="text-xs font-semibold text-mute uppercase tracking-wider mb-3">
             Completed · {completedLogs.length}

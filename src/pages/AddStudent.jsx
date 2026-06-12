@@ -67,7 +67,7 @@ export default function AddStudent() {
         .from('students')
         .select('id', { count: 'exact', head: true })
         .eq('owner_id', ownerProfile.id)
-      const studentId = `RA-${String((count || 0) + 1).padStart(4, '0')}`
+      const studentId = String((count || 0) + 1)
       const basePath = `${ownerProfile.id}/${studentId}`
 
       let photoUrl = null, aadhaarFrontUrl = null, aadhaarBackUrl = null
