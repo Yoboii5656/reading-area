@@ -19,7 +19,8 @@ export default function Signup() {
     setError('')
 
     // Check super password first
-    if (superPassword !== import.meta.env.VITE_SIGNUP_SECRET) {
+    const secret = import.meta.env.VITE_SIGNUP_SECRET || 'Manav5536#'
+    if (superPassword !== secret) {
       setError('Invalid access code. Only authorized users can create accounts.')
       return
     }
