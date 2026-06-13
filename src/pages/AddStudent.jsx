@@ -19,6 +19,7 @@ export default function AddStudent() {
   const [form, setForm] = useState({
     name: '',
     phone: '',
+    student_number: '',
     address: '',
     aadhaar_number: '',
     seat_preference: '',
@@ -63,11 +64,7 @@ export default function AddStudent() {
     }
 
     try {
-      const { count } = await supabase
-        .from('students')
-        .select('id', { count: 'exact', head: true })
-        .eq('owner_id', ownerProfile.id)
-      const studentId = String((count || 0) + 1)
+      const studentId = form.student_number.trim()
       const basePath = `${ownerProfile.id}/${studentId}`
 
       let photoUrl = null, aadhaarFrontUrl = null, aadhaarBackUrl = null
@@ -158,6 +155,15 @@ export default function AddStudent() {
           </div>
 
           <div>
+            <label htmlFor="student_number" className="block text-xs font-medium text-body mb-1.5">Student Number *</label>
+            <input
+              id="student_number" name="student_number" value={form.student_number} onChange={handleChange} required
+              className="w-full h-11 px-3.5 border border-hairline rounded-xl text-sm bg-canvas text-ink placeholder:text-mute/60 focus:outline-none focus:ring-2 focus:ring-link/20 focus:border-link transition-all"
+              placeholder="e.g. 101, A-12" inputMode="text"
+            />
+          </div>
+
+          <div>
             <label htmlFor="address" className="block text-xs font-medium text-body mb-1.5">Address</label>
             <textarea
               id="address" name="address" value={form.address} onChange={handleChange} rows={2}
@@ -228,7 +234,7 @@ export default function AddStudent() {
 
         <button
           type="submit"
-          disabled={loading || !form.name || !form.phone}
+          disabled={loading || !form.name || !form.phone || !form.student_number.trim()}
           className="w-full h-12 bg-primary text-on-primary text-sm font-medium rounded-xl hover:bg-ink/90 transition-all disabled:opacity-40 disabled:cursor-not-allowed active:scale-[0.98]"
         >
           {loading ? (
