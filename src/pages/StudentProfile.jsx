@@ -4,7 +4,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
 import { DEMO_MODE, mockStudents, getMockStudentAttendance, getMockStudentPayments } from '../lib/mockData'
 import { svgToDataUrl } from '../lib/qrUtils'
-import { ArrowLeft, Phone, MapPin, CreditCard, Calendar, QrCode, User, Clock, Download, Share2 } from 'lucide-react'
+import { ArrowLeft, Phone, MapPin, CreditCard, Calendar, QrCode, User, Clock, Download, Share2, Pencil, Upload, Check, X, Eye } from 'lucide-react'
 import { QRCodeSVG } from 'qrcode.react'
 
 export default function StudentProfile() {
@@ -17,6 +17,20 @@ export default function StudentProfile() {
   const [showQR, setShowQR] = useState(false)
   const [generatingPDF, setGeneratingPDF] = useState(false)
   const qrRef = useRef(null)
+
+  // Edit mode state
+  const [editing, setEditing] = useState(false)
+  const [editForm, setEditForm] = useState({})
+  const [editLoading, setEditLoading] = useState(false)
+  const [editError, setEditError] = useState('')
+  const [newAadhaarFront, setNewAadhaarFront] = useState(null)
+  const [newAadhaarBack, setNewAadhaarBack] = useState(null)
+  const [newPhoto, setNewPhoto] = useState(null)
+  const [newPhotoPreview, setNewPhotoPreview] = useState(null)
+  const photoEditRef = useRef()
+
+  // Aadhaar viewer state
+  const [viewingAadhaar, setViewingAadhaar] = useState(null) // 'front' | 'back' | null
 
   useEffect(() => {
     if (ownerProfile) fetchStudent()
@@ -63,6 +77,94 @@ export default function StudentProfile() {
   function getLastPaymentValidity() {
     if (payments.length === 0) return null
     return payments[0].valid_until
+  }
+
+  function startEditing() {
+    setEditForm({
+      name: student.name || '',
+      phone: student.phone || '',
+      address: student.address || '',
+      aadhaar_number: student.aadhaar_number || '',
+      seat_preference: student.seat_preference || '',
+    })
+    setNewAadhaarFront(null)
+    setNewAadhaarBack(null)
+    setNewPhoto(null)
+    setNewPhotoPreview(null)
+    setEditError('')
+    setEditing(true)
+  }
+
+  function cancelEditing() {
+    setEditing(false)
+    setEditForm({})
+    setNewAadhaarFront(null)
+    setNewAadhaarBack(null)
+    setNewPhoto(null)
+    setNewPhotoPreview(null)
+    setEditError('')
+  }
+
+  function handleEditChange(e) {
+    setEditForm(prev => ({ ...prev, [e.target.name]: e.target.value }))
+  }
+
+  function handleNewPhotoChange(e) {
+    const file = e.target.files[0]
+    if (file) {
+      setNewPhoto(file)
+      setNewPhotoPreview(URL.createObjectURL(file))
+    }
+  }
+
+  async function uploadFile(file, path) {
+    const { error } = await supabase.storage.from('student-files').upload(path, file, { upsert: true })
+    if (error) throw error
+    const { data: urlData } = supabase.storage.from('student-files').getPublicUrl(path)
+    return urlData.publicUrl
+  }
+
+  async function handleSaveEdit(e) {
+    e.preventDefault()
+    setEditError('')
+    setEditLoading(true)
+
+    if (DEMO_MODE) {
+      setStudent(prev => ({ ...prev, ...editForm }))
+      setEditing(false)
+      setEditLoading(false)
+      return
+    }
+
+    try {
+      const basePath = `${ownerProfile.id}/${student.student_id}`
+      const updates = { ...editForm }
+
+      if (newPhoto) {
+        updates.photo_url = await uploadFile(newPhoto, `${basePath}/photo.jpg`)
+      }
+      if (newAadhaarFront) {
+        updates.aadhaar_front_url = await uploadFile(newAadhaarFront, `${basePath}/aadhaar-front.jpg`)
+      }
+      if (newAadhaarBack) {
+        updates.aadhaar_back_url = await uploadFile(newAadhaarBack, `${basePath}/aadhaar-back.jpg`)
+      }
+
+      const { data, error: updateError } = await supabase
+        .from('students')
+        .update(updates)
+        .eq('id', id)
+        .eq('owner_id', ownerProfile.id)
+        .select()
+        .single()
+
+      if (updateError) throw updateError
+      setStudent(data)
+      setEditing(false)
+    } catch (err) {
+      setEditError(err.message || 'Failed to update student')
+    }
+    setEditLoading(false)
   }
 
   function getMembershipStatus() {
@@ -192,8 +294,192 @@ export default function StudentProfile() {
         <Link to="/students" className="p-2 -ml-2 hover:bg-canvas-soft-2 rounded-xl transition-colors active:scale-95">
           <ArrowLeft size={20} className="text-body" />
         </Link>
-        <h1 className="text-lg font-semibold tracking-[-0.4px] text-ink">Student Profile</h1>
+        <h1 className="text-lg font-semibold tracking-[-0.4px] text-ink flex-1">Student Profile</h1>
+        {!editing && (
+          <button
+            onClick={startEditing}
+            className="flex items-center gap-1.5 h-8 px-3 text-xs font-medium border border-hairline rounded-lg hover:bg-canvas-soft-2 hover:border-hairline-strong transition-all active:scale-[0.97]"
+          >
+            <Pencil size={12} />
+            Edit
+          </button>
+        )}
       </div>
+
+      {/* Aadhaar Image Viewer Modal */}
+      {viewingAadhaar && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/60 backdrop-blur-sm animate-fade-in" onClick={() => setViewingAadhaar(null)}>
+          <div className="relative max-w-[90vw] max-h-[85vh] bg-canvas rounded-2xl border border-hairline shadow-card overflow-hidden" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-4 py-3 border-b border-hairline">
+              <h3 className="text-sm font-semibold text-ink">
+                Aadhaar Card — {viewingAadhaar === 'front' ? 'Front' : 'Back'}
+              </h3>
+              <button onClick={() => setViewingAadhaar(null)} className="p-1.5 hover:bg-canvas-soft-2 rounded-lg transition-colors">
+                <X size={16} className="text-body" />
+              </button>
+            </div>
+            <div className="p-4">
+              <img
+                src={viewingAadhaar === 'front' ? student.aadhaar_front_url : student.aadhaar_back_url}
+                alt={`Aadhaar ${viewingAadhaar}`}
+                className="max-w-full max-h-[70vh] object-contain rounded-lg"
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Form */}
+      {editing && (
+        <form onSubmit={handleSaveEdit} className="bg-canvas rounded-2xl border border-hairline p-5 shadow-card space-y-4 animate-fade-in">
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="text-sm font-semibold text-ink">Edit Student Details</h3>
+            <button type="button" onClick={cancelEditing} className="p-1.5 hover:bg-canvas-soft-2 rounded-lg transition-colors">
+              <X size={16} className="text-body" />
+            </button>
+          </div>
+
+          {/* Photo Edit */}
+          <div className="flex justify-center">
+            <button
+              type="button"
+              onClick={() => photoEditRef.current?.click()}
+              className="group relative w-20 h-20 rounded-2xl bg-canvas-soft-2 border-2 border-dashed border-hairline flex items-center justify-center overflow-hidden hover:border-link/40 hover:bg-link/5 transition-all"
+            >
+              {newPhotoPreview || student.photo_url ? (
+                <img src={newPhotoPreview || student.photo_url} alt="Student" className="w-full h-full object-cover rounded-2xl" />
+              ) : (
+                <div className="flex flex-col items-center gap-0.5">
+                  <Upload size={18} className="text-mute group-hover:text-link" />
+                  <span className="text-[9px] font-medium text-mute">Photo</span>
+                </div>
+              )}
+              <div className="absolute inset-0 bg-ink/30 opacity-0 group-hover:opacity-100 flex items-center justify-center rounded-2xl transition-opacity">
+                <Pencil size={14} className="text-white" />
+              </div>
+            </button>
+            <input ref={photoEditRef} type="file" accept="image/*" capture="user" onChange={handleNewPhotoChange} className="hidden" />
+          </div>
+
+          <div>
+            <label htmlFor="edit-name" className="block text-xs font-medium text-body mb-1.5">Full Name *</label>
+            <input
+              id="edit-name" name="name" value={editForm.name} onChange={handleEditChange} required
+              className="w-full h-11 px-3.5 border border-hairline rounded-xl text-sm bg-canvas text-ink placeholder:text-mute/60 focus:outline-none focus:ring-2 focus:ring-link/20 focus:border-link transition-all"
+            />
+          </div>
+
+          <div>
+            <label htmlFor="edit-phone" className="block text-xs font-medium text-body mb-1.5">Phone Number *</label>
+            <input
+              id="edit-phone" name="phone" type="tel" value={editForm.phone} onChange={handleEditChange} required
+              className="w-full h-11 px-3.5 border border-hairline rounded-xl text-sm bg-canvas text-ink placeholder:text-mute/60 focus:outline-none focus:ring-2 focus:ring-link/20 focus:border-link transition-all"
+              inputMode="numeric"
+            />
+          </div>
+
+          <div>
+            <label htmlFor="edit-address" className="block text-xs font-medium text-body mb-1.5">Address</label>
+            <textarea
+              id="edit-address" name="address" value={editForm.address} onChange={handleEditChange} rows={2}
+              className="w-full px-3.5 py-2.5 border border-hairline rounded-xl text-sm bg-canvas text-ink placeholder:text-mute/60 focus:outline-none focus:ring-2 focus:ring-link/20 focus:border-link resize-none transition-all"
+            />
+          </div>
+
+          <div>
+            <label htmlFor="edit-aadhaar" className="block text-xs font-medium text-body mb-1.5">Aadhaar Number</label>
+            <input
+              id="edit-aadhaar" name="aadhaar_number" value={editForm.aadhaar_number} onChange={handleEditChange}
+              className="w-full h-11 px-3.5 border border-hairline rounded-xl text-sm bg-canvas text-ink placeholder:text-mute/60 focus:outline-none focus:ring-2 focus:ring-link/20 focus:border-link transition-all"
+              placeholder="1234 5678 9012" maxLength={14} inputMode="numeric"
+            />
+          </div>
+
+          <div>
+            <label htmlFor="edit-seat" className="block text-xs font-medium text-body mb-1.5">Seat Preference</label>
+            <input
+              id="edit-seat" name="seat_preference" value={editForm.seat_preference} onChange={handleEditChange}
+              className="w-full h-11 px-3.5 border border-hairline rounded-xl text-sm bg-canvas text-ink placeholder:text-mute/60 focus:outline-none focus:ring-2 focus:ring-link/20 focus:border-link transition-all"
+              placeholder="e.g. Window side, Row 3"
+            />
+          </div>
+
+          {/* Aadhaar Photos Upload */}
+          <div>
+            <h4 className="text-xs font-semibold text-body mb-2">Aadhaar Card Photos</h4>
+            <div className="grid grid-cols-2 gap-3">
+              <label className="flex flex-col items-center justify-center h-24 border-2 border-dashed border-hairline rounded-xl bg-canvas-soft/50 cursor-pointer hover:border-link/40 hover:bg-link/5 transition-all">
+                <input type="file" accept="image/*" capture="environment" onChange={(e) => setNewAadhaarFront(e.target.files[0])} className="hidden" />
+                {newAadhaarFront ? (
+                  <div className="flex flex-col items-center gap-1">
+                    <Check size={18} className="text-success" />
+                    <span className="text-[10px] font-medium text-success">New Front</span>
+                  </div>
+                ) : student.aadhaar_front_url ? (
+                  <div className="flex flex-col items-center gap-1">
+                    <Check size={18} className="text-link" />
+                    <span className="text-[10px] font-medium text-link">Front Exists</span>
+                    <span className="text-[9px] text-mute">Tap to replace</span>
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center gap-1">
+                    <Upload size={18} className="text-mute" />
+                    <span className="text-[10px] font-medium text-mute">Front Side</span>
+                  </div>
+                )}
+              </label>
+              <label className="flex flex-col items-center justify-center h-24 border-2 border-dashed border-hairline rounded-xl bg-canvas-soft/50 cursor-pointer hover:border-link/40 hover:bg-link/5 transition-all">
+                <input type="file" accept="image/*" capture="environment" onChange={(e) => setNewAadhaarBack(e.target.files[0])} className="hidden" />
+                {newAadhaarBack ? (
+                  <div className="flex flex-col items-center gap-1">
+                    <Check size={18} className="text-success" />
+                    <span className="text-[10px] font-medium text-success">New Back</span>
+                  </div>
+                ) : student.aadhaar_back_url ? (
+                  <div className="flex flex-col items-center gap-1">
+                    <Check size={18} className="text-link" />
+                    <span className="text-[10px] font-medium text-link">Back Exists</span>
+                    <span className="text-[9px] text-mute">Tap to replace</span>
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center gap-1">
+                    <Upload size={18} className="text-mute" />
+                    <span className="text-[10px] font-medium text-mute">Back Side</span>
+                  </div>
+                )}
+              </label>
+            </div>
+          </div>
+
+          {editError && (
+            <p className="text-error text-sm bg-error-soft/50 p-3 rounded-xl border border-error/20 text-center">
+              {editError}
+            </p>
+          )}
+
+          <div className="flex gap-2 pt-2">
+            <button
+              type="button"
+              onClick={cancelEditing}
+              className="flex-1 h-11 text-sm font-medium border border-hairline rounded-xl hover:bg-canvas-soft-2 transition-all active:scale-[0.98]"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={editLoading || !editForm.name || !editForm.phone}
+              className="flex-1 h-11 bg-primary text-on-primary text-sm font-medium rounded-xl hover:bg-ink/90 transition-all disabled:opacity-40 active:scale-[0.98]"
+            >
+              {editLoading ? (
+                <span className="flex items-center justify-center gap-2">
+                  <div className="w-4 h-4 border-2 border-on-primary/30 border-t-on-primary rounded-full animate-spin" />
+                  Saving...
+                </span>
+              ) : 'Save Changes'}
+            </button>
+          </div>
+        </form>
+      )}
 
       {/* Profile Card */}
       <div className="bg-canvas rounded-2xl border border-hairline overflow-hidden shadow-card">
@@ -287,6 +573,39 @@ export default function StudentProfile() {
               <span>Joined {new Date(student.joined_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
             </div>
           </div>
+
+          {/* Aadhaar Card Photos Section */}
+          {(student.aadhaar_front_url || student.aadhaar_back_url) && (
+            <div className="mt-4 pt-4 border-t border-hairline/60">
+              <h4 className="text-xs font-semibold text-mute uppercase tracking-wider mb-3">Aadhaar Card</h4>
+              <div className="grid grid-cols-2 gap-3">
+                {student.aadhaar_front_url && (
+                  <button
+                    onClick={() => setViewingAadhaar('front')}
+                    className="relative group h-20 rounded-xl overflow-hidden border border-hairline hover:border-link/40 transition-all"
+                  >
+                    <img src={student.aadhaar_front_url} alt="Aadhaar Front" className="w-full h-full object-cover" />
+                    <div className="absolute inset-0 bg-ink/0 group-hover:bg-ink/30 flex items-center justify-center transition-all">
+                      <Eye size={16} className="text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+                    </div>
+                    <span className="absolute bottom-1 left-1 text-[9px] font-medium bg-canvas/80 backdrop-blur-sm px-1.5 py-0.5 rounded text-body">Front</span>
+                  </button>
+                )}
+                {student.aadhaar_back_url && (
+                  <button
+                    onClick={() => setViewingAadhaar('back')}
+                    className="relative group h-20 rounded-xl overflow-hidden border border-hairline hover:border-link/40 transition-all"
+                  >
+                    <img src={student.aadhaar_back_url} alt="Aadhaar Back" className="w-full h-full object-cover" />
+                    <div className="absolute inset-0 bg-ink/0 group-hover:bg-ink/30 flex items-center justify-center transition-all">
+                      <Eye size={16} className="text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+                    </div>
+                    <span className="absolute bottom-1 left-1 text-[9px] font-medium bg-canvas/80 backdrop-blur-sm px-1.5 py-0.5 rounded text-body">Back</span>
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
